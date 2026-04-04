@@ -38,3 +38,8 @@ streamlit run dashboard.py
 - `features.csv` - Engineered features
 - `*.pkl` - Trained models
 - `blocked_ips.txt` - Blocked IPs
+
+  ## integration of interactive captcha in the system to avoid large traffic
+  <img width="518" height="473" alt="{9F3DD3BE-30AC-454C-85EC-60587EE3774B}" src="https://github.com/user-attachments/assets/0c583672-88d7-4bef-bc5d-364db11d9afa" />
+  
+
