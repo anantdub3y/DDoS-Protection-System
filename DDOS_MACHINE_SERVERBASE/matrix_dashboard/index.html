@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>DDoS Shield — Matrix Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #060608;
+    --surface:  #0d0e14;
+    --card:     #0e1018;
+    --border:   #1a1d2e;
+    --accent:   #00ffa3;
+    --danger:   #ff4466;
+    --warn:     #ffaa00;
+    --info:     #4488ff;
+    --purple:   #b060ff;
+    --text:     #c8ccd8;
+    --dim:      #4a4f66;
+    --mono:     'Share Tech Mono', monospace;
+    --sans:     'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px,
+      rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px);
+    pointer-events: none; z-index: 999;
+  }
+
+  /* Grid bg */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,163,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,163,0.015) 1px, transparent 1px);
+    background-size: 32px 32px;
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ── Header ── */
+  header {
+    position: relative; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1.2rem 2rem;
+    border-bottom: 1px solid var(--border);
+    background: rgba(6,6,8,0.95);
+    backdrop-filter: blur(12px);
+  }
+
+  .logo { display: flex; align-items: center; gap: 0.75rem; }
+  .logo-icon {
+    width: 36px; height: 36px;
+    border: 2px solid var(--accent); border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem;
+    box-shadow: 0 0 16px rgba(0,255,163,0.3);
+    animation: pulse-border 3s ease-in-out infinite;
+  }
+  @keyframes pulse-border {
+    0%,100% { box-shadow: 0 0 12px rgba(0,255,163,0.3); }
+    50%      { box-shadow: 0 0 28px rgba(0,255,163,0.65); }
+  }
+  .logo-name { font-family: var(--sans); font-weight: 800; font-size: 1.05rem; letter-spacing:.05em; }
+  .logo-sub  { font-size: .65rem; color: var(--dim); letter-spacing:.12em; text-transform:uppercase; }
+
+  .header-right { display: flex; align-items: center; gap: 1.5rem; }
+
+  .status-badge {
+    display: flex; align-items: center; gap: .45rem;
+    font-size: .72rem; color: var(--dim);
+    border: 1px solid var(--border); border-radius: 99px;
+    padding: .3rem .9rem;
+  }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--dim);
+    transition: background .3s;
+  }
+  .status-dot.live { background: var(--accent); box-shadow: 0 0 8px rgba(0,255,163,.6); animation: blink 1.5s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  #last-update { font-size: .68rem; color: var(--dim); }
+
+  .backend-input-wrap {
+    display: flex; align-items: center; gap: .5rem;
+  }
+  .backend-input-wrap input {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--mono); font-size: .72rem;
+    padding: .3rem .7rem; border-radius: 6px; width: 200px;
+  }
+  .backend-input-wrap button {
+    background: var(--accent); color: #000; border: none;
+    font-family: var(--mono); font-size: .72rem; font-weight: bold;
+    padding: .3rem .7rem; border-radius: 6px; cursor: pointer;
+  }
+
+  /* ── Summary bar ── */
+  .summary-bar {
+    position: relative; z-index: 5;
+    display: grid; grid-template-columns: repeat(6, 1fr);
+    gap: 1px; background: var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .summary-cell {
+    background: var(--surface);
+    padding: 1rem 1.5rem;
+    display: flex; flex-direction: column; gap: .2rem;
+  }
+  .summary-cell .val {
+    font-size: 1.6rem; font-family: var(--sans); font-weight: 800;
+    color: var(--accent);
+    transition: color .3s;
+  }
+  .summary-cell .val.danger { color: var(--danger); }
+  .summary-cell .val.warn   { color: var(--warn); }
+  .summary-cell .val.info   { color: var(--info); }
+  .summary-cell .val.purple { color: var(--purple); }
+  .summary-cell .lbl { font-size: .65rem; color: var(--dim); text-transform: uppercase; letter-spacing: .1em; }
+
+  /* ── Main grid ── */
+  .main {
+    position: relative; z-index: 5;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 1px;
+    background: var(--border);
+    padding: 0;
+  }
+
+  .panel {
+    background: var(--card);
+    padding: 1.2rem 1.4rem;
+  }
+
+  .panel.full-width { grid-column: 1 / -1; }
+  .panel.triple { grid-column: span 2; }
+
+  .panel-title {
+    font-family: var(--sans); font-weight: 700; font-size: .78rem;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 1rem;
+    display: flex; align-items: center; gap: .5rem;
+  }
+  .panel-title .icon { font-size: 1rem; }
+
+  /* ── Timeline chart ── */
+  .timeline-wrap {
+    display: flex; align-items: flex-end; gap: 2px;
+    height: 80px;
+    overflow: hidden;
+  }
+  .tl-bar-wrap { flex: 1; display: flex; flex-direction: column; gap: 1px; height: 100%; justify-content: flex-end; }
+  .tl-bar {
+    width: 100%; border-radius: 2px 2px 0 0;
+    transition: height .4s ease;
+    min-height: 2px;
+  }
+  .tl-bar.allowed { background: var(--accent); opacity: .7; }
+  .tl-bar.blocked { background: var(--danger); opacity: .85; }
+
+  /* ── IP Matrix ── */
+  .matrix-table {
+    width: 100%; border-collapse: collapse; font-size: .72rem;
+  }
+  .matrix-table th {
+    text-align: left; color: var(--dim); font-weight: normal;
+    padding: .35rem .5rem; border-bottom: 1px solid var(--border);
+    text-transform: uppercase; font-size: .62rem; letter-spacing: .08em;
+  }
+  .matrix-table td {
+    padding: .4rem .5rem; border-bottom: 1px solid rgba(30,32,48,.5);
+    transition: background .2s;
+  }
+  .matrix-table tr:hover td { background: rgba(255,255,255,.02); }
+
+  .threat-badge {
+    display: inline-block; padding: .15rem .5rem; border-radius: 4px;
+    font-size: .6rem; font-weight: bold; text-transform: uppercase; letter-spacing: .06em;
+  }
+  .threat-low      { background: rgba(0,255,163,.12);  color: var(--accent); }
+  .threat-medium   { background: rgba(255,170,0,.12);  color: var(--warn); }
+  .threat-high     { background: rgba(255,68,102,.15); color: var(--danger); }
+  .threat-critical { background: rgba(255,68,102,.3);  color: var(--danger);
+                     box-shadow: 0 0 6px rgba(255,68,102,.4); animation: flicker .8s infinite; }
+  @keyframes flicker { 0%,100%{opacity:1} 50%{opacity:.6} }
+
+  .ban-btn {
+    background: rgba(255,68,102,.15); color: var(--danger);
+    border: 1px solid rgba(255,68,102,.3); border-radius: 4px;
+    font-family: var(--mono); font-size: .6rem; padding: .15rem .4rem;
+    cursor: pointer; transition: all .2s;
+  }
+  .ban-btn:hover { background: rgba(255,68,102,.35); }
+  .banned-label { color: var(--danger); font-size: .6rem; }
+
+  /* ── Click matrix ── */
+  .click-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 6px;
+  }
+  .click-cell {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: .6rem .8rem;
+    display: flex; flex-direction: column; gap: .3rem;
+    transition: border-color .3s, box-shadow .3s;
+    cursor: default;
+  }
+  .click-cell:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 12px rgba(0,255,163,.1);
+  }
+  .click-cell .el-name {
+    font-size: .68rem; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .click-cell .el-page { font-size: .58rem; color: var(--dim); }
+  .click-cell .el-bar-wrap {
+    height: 4px; background: var(--border); border-radius: 2px; overflow: hidden;
+  }
+  .click-cell .el-bar {
+    height: 100%; background: var(--accent); border-radius: 2px;
+    transition: width .5s ease;
+  }
+  .click-cell .el-count { font-size: .7rem; color: var(--accent); font-weight: bold; }
+
+  /* ── Endpoint matrix ── */
+  .endpoint-row {
+    display: flex; align-items: center; gap: .75rem;
+    padding: .4rem 0; border-bottom: 1px solid rgba(30,32,48,.5);
+    font-size: .72rem;
+  }
+  .endpoint-row:last-child { border: none; }
+  .ep-path { color: var(--info); flex: 0 0 160px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ep-bar-wrap { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .ep-bar-inner { height: 100%; border-radius: 3px; transition: width .5s ease; }
+  .ep-bar-allowed { background: var(--accent); }
+  .ep-bar-blocked { background: var(--danger); }
+  .ep-nums { font-size: .65rem; color: var(--dim); white-space: nowrap; }
+
+  /* ── Live feed ── */
+  .feed-wrap {
+    height: 260px; overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .feed-entry {
+    display: flex; gap: .6rem; align-items: flex-start;
+    padding: .35rem .2rem; border-bottom: 1px solid rgba(30,32,48,.4);
+    font-size: .67rem; animation: fadein .3s ease;
+  }
+  @keyframes fadein { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:none} }
+  .feed-time { color: var(--dim); white-space: nowrap; flex: 0 0 75px; }
+  .feed-ip   { color: var(--info); flex: 0 0 110px; }
+  .feed-path { color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .feed-status { flex: 0 0 60px; text-align: right; }
+  .feed-ok  { color: var(--accent); }
+  .feed-blk { color: var(--danger); }
+
+  /* ── Click feed ── */
+  .click-feed-wrap {
+    height: 200px; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .click-entry {
+    display: flex; gap: .6rem; align-items: center;
+    padding: .3rem .2rem; border-bottom: 1px solid rgba(30,32,48,.3);
+    font-size: .67rem; animation: fadein .3s ease;
+  }
+  .click-page { color: var(--purple); flex: 0 0 90px; }
+  .click-el   { color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .click-ts   { color: var(--dim); font-size: .6rem; white-space: nowrap; }
+
+  /* ── Error state ── */
+  .error-overlay {
+    position: fixed; inset: 0;
+    background: rgba(6,6,8,.92);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; flex-direction: column; gap: 1rem;
+    display: none;
+  }
+  .error-overlay.show { display: flex; }
+  .error-box {
+    border: 1px solid var(--danger); padding: 2rem 3rem;
+    text-align: center; max-width: 420px;
+    box-shadow: 0 0 40px rgba(255,68,102,.2);
+  }
+  .error-box h2 { color: var(--danger); margin-bottom: .75rem; font-family: var(--sans); }
+  .error-box p  { color: var(--dim); font-size: .8rem; line-height: 1.6; }
+  .error-box code { color: var(--accent); }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .summary-bar { grid-template-columns: repeat(3, 1fr); }
+    .main { grid-template-columns: 1fr; }
+    .panel.full-width, .panel.triple { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">⬡</div>
+    <div>
+      <div class="logo-name">DDoS Shield</div>
+      <div class="logo-sub">Matrix Dashboard</div>
+    </div>
+  </div>
+
+  <div class="header-right">
+    <div class="backend-input-wrap">
+      <input id="backendUrl" type="text" value="http://localhost:8080" placeholder="Backend URL"/>
+      <button onclick="reconnect()">Connect</button>
+    </div>
+    <div class="status-badge">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Connecting…</span>
+    </div>
+    <div id="last-update">—</div>
+  </div>
+</header>
+
+<!-- ── Summary bar ── -->
+<div class="summary-bar">
+  <div class="summary-cell">
+    <div class="val" id="s-total">—</div>
+    <div class="lbl">Total Requests</div>
+  </div>
+  <div class="summary-cell">
+    <div class="val" id="s-allowed">—</div>
+    <div class="lbl">Allowed</div>
+  </div>
+  <div class="summary-cell">
+    <div class="val danger" id="s-blocked">—</div>
+    <div class="lbl">Blocked</div>
+  </div>
+  <div class="summary-cell">
+    <div class="val warn" id="s-banned">—</div>
+    <div class="lbl">Banned IPs</div>
+  </div>
+  <div class="summary-cell">
+    <div class="val info" id="s-rps">—</div>
+    <div class="lbl">Req / sec</div>
+  </div>
+  <div class="summary-cell">
+    <div class="val purple" id="s-clicks">—</div>
+    <div class="lbl">UI Clicks (EduNexus)</div>
+  </div>
+</div>
+
+<!-- ── Main grid ── -->
+<div class="main">
+
+  <!-- Traffic Timeline -->
+  <div class="panel full-width">
+    <div class="panel-title"><span class="icon">📈</span> Request Timeline — Last 60 Seconds</div>
+    <div class="timeline-wrap" id="timeline"></div>
+    <div style="display:flex;gap:1.5rem;margin-top:.6rem;font-size:.65rem;color:var(--dim)">
+      <span><span style="color:var(--accent)">■</span> Allowed</span>
+      <span><span style="color:var(--danger)">■</span> Blocked</span>
+      <span style="margin-left:auto" id="tl-label">← 60s ago &nbsp;&nbsp; now →</span>
+    </div>
+  </div>
+
+  <!-- IP Threat Matrix -->
+  <div class="panel">
+    <div class="panel-title"><span class="icon">🌐</span> IP Threat Matrix</div>
+    <table class="matrix-table">
+      <thead>
+        <tr>
+          <th>IP Address</th>
+          <th>Total</th>
+          <th>Blocked</th>
+          <th>Threat</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="ip-matrix-body">
+        <tr><td colspan="5" style="color:var(--dim);text-align:center;padding:1.5rem">Waiting for data…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Endpoint Matrix -->
+  <div class="panel">
+    <div class="panel-title"><span class="icon">🔗</span> Endpoint Hit Matrix</div>
+    <div id="endpoint-matrix"></div>
+  </div>
+
+  <!-- Click Matrix Grid -->
+  <div class="panel full-width">
+    <div class="panel-title"><span class="icon">🖱</span> Clickable Element Matrix — EduNexus UI Interactions</div>
+    <div class="click-grid" id="click-matrix"></div>
+    <div id="click-empty" style="color:var(--dim);font-size:.75rem;padding:.5rem 0">
+      No clicks recorded yet. Interact with EduNexus to see data here.
+    </div>
+  </div>
+
+  <!-- Live Request Feed -->
+  <div class="panel">
+    <div class="panel-title"><span class="icon">⚡</span> Live Request Feed</div>
+    <div class="feed-wrap" id="live-feed">
+      <div class="feed-entry">
+        <span class="feed-time">—</span>
+        <span class="feed-ip" style="color:var(--dim)">waiting…</span>
+        <span class="feed-path"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Click Feed -->
+  <div class="panel">
+    <div class="panel-title"><span class="icon">🖱</span> Live Click Feed — EduNexus</div>
+    <div class="click-feed-wrap" id="click-feed">
+      <div class="click-entry">
+        <span class="click-page" style="color:var(--dim)">waiting…</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Error overlay -->
+<div class="error-overlay" id="errorOverlay">
+  <div class="error-box">
+    <h2>⚠ Cannot reach backend</h2>
+    <p>Make sure the backend server is running:<br><br>
+      <code>python backend/server.py</code><br><br>
+      Then enter the URL above and click <strong>Connect</strong>.
+    </p>
+  </div>
+</div>
+
+<script>
+  let BACKEND = 'http://localhost:8080'
+  let pollTimer = null
+  let prevClickCount = 0
+
+  // ── Reconnect ────────────────────────────────────────────────────────────
+  function reconnect() {
+    BACKEND = document.getElementById('backendUrl').value.replace(/\/$/, '')
+    if (pollTimer) clearInterval(pollTimer)
+    poll()
+    pollTimer = setInterval(poll, 2000)
+  }
+
+  // ── Fetch matrix data ────────────────────────────────────────────────────
+  async function poll() {
+    try {
+      const res = await fetch(`${BACKEND}/matrix`, { signal: AbortSignal.timeout(4000) })
+      if (!res.ok) throw new Error(res.status)
+      const data = await res.json()
+      render(data)
+      setStatus(true)
+      document.getElementById('errorOverlay').classList.remove('show')
+    } catch (e) {
+      setStatus(false)
+      document.getElementById('errorOverlay').classList.add('show')
+    }
+  }
+
+  function setStatus(ok) {
+    const dot  = document.getElementById('statusDot')
+    const text = document.getElementById('statusText')
+    if (ok) {
+      dot.className  = 'status-dot live'
+      text.textContent = 'Live'
+      document.getElementById('last-update').textContent =
+        'Updated ' + new Date().toLocaleTimeString()
+    } else {
+      dot.className  = 'status-dot'
+      text.textContent = 'Offline'
+    }
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────
+  function render(d) {
+    const s = d.summary
+
+    // Summary bar
+    setText('s-total',   s.total)
+    setText('s-allowed', s.total - s.blocked)
+    setText('s-blocked', s.blocked)
+    setText('s-banned',  s.banned)
+    setText('s-rps',     (s.total / Math.max(s.uptime, 1)).toFixed(2))
+    setText('s-clicks',  s.clicks)
+
+    // Timeline
+    renderTimeline(d.timeline)
+
+    // IP matrix
+    renderIPMatrix(d.ip_matrix)
+
+    // Endpoint matrix
+    renderEndpoints(d.endpoint_matrix)
+
+    // Click matrix
+    renderClickMatrix(d.click_matrix)
+
+    // Live request feed
+    renderFeed(d)
+
+    // Live click feed
+    renderClickFeed(d.recent_clicks || [])
+  }
+
+  function setText(id, val) {
+    const el = document.getElementById(id)
+    if (el) el.textContent = val
+  }
+
+  // ── Timeline ─────────────────────────────────────────────────────────────
+  function renderTimeline(tl) {
+    const wrap = document.getElementById('timeline')
+    if (!tl || !tl.length) return
+    const maxVal = Math.max(...tl.map(t => (t.allowed || 0) + (t.blocked || 0)), 1)
+    wrap.innerHTML = tl.map(t => {
+      const total   = (t.allowed || 0) + (t.blocked || 0)
+      const hTotal  = Math.round((total  / maxVal) * 76)
+      const hBlocked = total > 0 ? Math.round((t.blocked / total) * hTotal) : 0
+      const hAllowed = hTotal - hBlocked
+      return `<div class="tl-bar-wrap" title="sec ${t.sec}: ${t.allowed} ok / ${t.blocked} blocked">
+        ${hBlocked > 0 ? `<div class="tl-bar blocked" style="height:${hBlocked}px"></div>` : ''}
+        ${hAllowed > 0 ? `<div class="tl-bar allowed" style="height:${hAllowed}px"></div>` : ''}
+        ${total === 0  ? `<div class="tl-bar" style="height:2px;background:var(--border)"></div>` : ''}
+      </div>`
+    }).join('')
+  }
+
+  // ── IP Matrix ────────────────────────────────────────────────────────────
+  function renderIPMatrix(ips) {
+    const tbody = document.getElementById('ip-matrix-body')
+    if (!ips || !ips.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="color:var(--dim);text-align:center;padding:1rem">No requests yet</td></tr>'
+      return
+    }
+    tbody.innerHTML = ips.map(row => `
+      <tr>
+        <td style="color:var(--info);font-size:.7rem">${row.ip}</td>
+        <td>${row.total}</td>
+        <td style="color:${row.blocked > 0 ? 'var(--danger)' : 'var(--dim)'}">${row.blocked}</td>
+        <td><span class="threat-badge threat-${row.threat}">${row.threat}</span></td>
+        <td>${row.banned
+          ? '<span class="banned-label">🚫 BANNED</span>'
+          : `<button class="ban-btn" onclick="banIP('${row.ip}')">Ban</button>`
+        }</td>
+      </tr>
+    `).join('')
+  }
+
+  async function banIP(ip) {
+    try {
+      await fetch(`${BACKEND}/track`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ element: `ban:${ip}`, page: 'matrix-dashboard', event: 'admin-ban' })
+      })
+      // Trigger a burst to simulate — in production you'd call a real /ban endpoint
+      alert(`Ban signal sent for ${ip}. The backend will auto-ban based on rate limit thresholds.`)
+    } catch(e) {}
+    poll()
+  }
+
+  // ── Endpoint matrix ───────────────────────────────────────────────────────
+  function renderEndpoints(eps) {
+    const wrap = document.getElementById('endpoint-matrix')
+    if (!eps || !eps.length) {
+      wrap.innerHTML = '<div style="color:var(--dim);font-size:.75rem">No requests yet</div>'
+      return
+    }
+    const maxTotal = Math.max(...eps.map(e => e.total), 1)
+    wrap.innerHTML = eps.map(e => {
+      const wAllowed = Math.round(((e.allowed || 0) / maxTotal) * 100)
+      const wBlocked = Math.round(((e.blocked || 0) / maxTotal) * 100)
+      return `<div class="endpoint-row">
+        <div class="ep-path" title="${e.path}">${e.path}</div>
+        <div class="ep-bar-wrap" style="position:relative">
+          <div style="position:absolute;inset:0;display:flex">
+            <div class="ep-bar-inner ep-bar-allowed" style="width:${wAllowed}%"></div>
+            <div class="ep-bar-inner ep-bar-blocked" style="width:${wBlocked}%"></div>
+          </div>
+        </div>
+        <div class="ep-nums">${e.allowed} ok / <span style="color:var(--danger)">${e.blocked} blk</span></div>
+      </div>`
+    }).join('')
+  }
+
+  // ── Click matrix ──────────────────────────────────────────────────────────
+  function renderClickMatrix(clicks) {
+    const wrap  = document.getElementById('click-matrix')
+    const empty = document.getElementById('click-empty')
+    if (!clicks || !clicks.length) {
+      wrap.innerHTML = ''
+      empty.style.display = 'block'
+      return
+    }
+    empty.style.display = 'none'
+    const maxCount = Math.max(...clicks.map(c => c.count), 1)
+    wrap.innerHTML = clicks.map(c => {
+      const pct = Math.round((c.count / maxCount) * 100)
+      const hue = pct > 70 ? 'var(--danger)' : pct > 35 ? 'var(--warn)' : 'var(--accent)'
+      return `<div class="click-cell" title="${c.element} — ${c.count} clicks">
+        <div class="el-name">${escHtml(c.element)}</div>
+        <div class="el-page">${escHtml(c.page)}</div>
+        <div class="el-bar-wrap"><div class="el-bar" style="width:${pct}%;background:${hue}"></div></div>
+        <div class="el-count" style="color:${hue}">${c.count}</div>
+      </div>`
+    }).join('')
+  }
+
+  // ── Live request feed ─────────────────────────────────────────────────────
+  function renderFeed(d) {
+    const feed = document.getElementById('live-feed')
+    const recent = (d.recent_requests || []).slice().reverse()
+    if (!recent.length) return
+    feed.innerHTML = recent.map(r => `
+      <div class="feed-entry">
+        <span class="feed-time">${r.time.slice(11,19)}</span>
+        <span class="feed-ip">${r.ip}</span>
+        <span class="feed-path">${escHtml(r.method)} ${escHtml(r.path)}</span>
+        <span class="feed-status ${r.blocked ? 'feed-blk' : 'feed-ok'}">${r.blocked ? '🚫 BLOCKED' : '✓ OK'}</span>
+      </div>
+    `).join('')
+  }
+
+  // ── Live click feed ───────────────────────────────────────────────────────
+  function renderClickFeed(clicks) {
+    const feed = document.getElementById('click-feed')
+    if (!clicks.length) return
+    const items = clicks.slice().reverse()
+    feed.innerHTML = items.map(c => `
+      <div class="click-entry">
+        <span class="click-page">${escHtml(c.page || '?')}</span>
+        <span class="click-el">${escHtml(c.element || '?')}</span>
+        <span class="click-ts">${(c.time || '').slice(11,19)}</span>
+      </div>
+    `).join('')
+  }
+
+  function escHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  }
+
+  // ── Start ─────────────────────────────────────────────────────────────────
+  reconnect()
+</script>
+</body>
+</html>

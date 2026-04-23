@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env
+
+requests.db
+__pycache__/
+*.pyc
+.env
+
+.vercel
+.env*.local
